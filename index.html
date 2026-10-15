@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prader Classification 3D Morphological Simulator | EN / JA Bilingual</title>
+  <meta name="description" content="Interactive 3D anatomical simulator illustrating the continuous spectrum of external genitalia differentiation across Prader Stages 0 to V for DSD shared decision-making and medical education." />
+  <meta property="og:title" content="Prader Scale 3D Morphological Simulator (EN/JA)" />
+  <meta property="og:description" content="Interactive 3D visualization of genital tubercle growth, chordee, labioscrotal fusion, urethral meatus migration, and gonadal descent." />
+  <meta property="og:type" content="website" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Hiragino Sans', 'Meiryo', sans-serif; background: #0f172a; color: #f8fafc; }
+    input[type="range"] { accent-color: #38bdf8; }
+  </style>
+</head>
+<body class="flex flex-col md:flex-row h-screen w-screen">
+
+  <!-- 3D Viewport -->
+  <div class="relative flex-1 h-[54vh] md:h-full bg-slate-900 overflow-hidden">
+    <div id="canvas-container" class="w-full h-full"></div>
+
+    <!-- Top-Left: Title, Language Switcher & Camera / Mode Controls -->
+    <div class="absolute top-4 left-4 flex flex-col gap-2 pointer-events-auto max-w-sm w-[calc(100%-2rem)] sm:w-auto">
+      <div class="bg-slate-900/85 backdrop-blur border border-slate-700 px-4 py-2.5 rounded-xl shadow-lg">
+        <div class="flex items-center justify-between gap-2">
+          <span id="ui-subtitle" class="text-[10px] font-bold uppercase tracking-wider text-sky-400">DSD Shared Decision-Making & Education</span>
+          <!-- Language Toggle Button -->
+          <button id="btn-lang" onclick="toggleLanguage()" class="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 transition shadow flex items-center gap-1 shrink-0">
+            🌐 EN / 日本語
+          </button>
+        </div>
+        <h1 id="ui-title" class="text-base font-bold text-white mt-0.5">Prader Scale 3D Simulator</h1>
+      </div>
+
+      <!-- Visual Mode Toggle (Schematic vs Realistic) & Views -->
+      <div class="bg-slate-900/85 backdrop-blur border border-slate-700 p-2 rounded-xl flex flex-col gap-2 shadow-lg">
+        <div class="flex items-center gap-1.5">
+          <button id="btn-mode-schema" onclick="setVisualMode('schema')" class="flex-1 py-1.5 px-2.5 text-xs rounded-lg font-bold bg-sky-600 text-white border border-sky-400 transition">
+            🎨 Schematic Mode
+          </button>
+          <button id="btn-mode-realistic" onclick="setVisualMode('realistic')" class="flex-1 py-1.5 px-2.5 text-xs rounded-lg font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">
+            ✨ Realistic Mode
+          </button>
+        </div>
+
+        <div class="flex flex-wrap gap-1.5 pt-1 border-t border-slate-800">
+          <button id="btn-view-oblique" onclick="setCameraView('oblique')" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-sky-600 transition">Oblique View</button>
+          <button id="btn-view-lateral" onclick="setCameraView('lateral')" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-sky-600 transition">Lateral (Chordee & Gonads)</button>
+          <button id="btn-view-ventral" onclick="setCameraView('ventral')" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-sky-600 transition">Ventral / Perineal</button>
+          <button id="btn-sagittal" onclick="toggleSagittal()" class="px-2.5 py-1 text-xs rounded-lg bg-indigo-900/80 border border-indigo-500 text-indigo-200 hover:bg-indigo-700 transition font-semibold">
+            🔍 Sagittal Cut: OFF
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom-Left: Anatomical Legend -->
+    <div id="legend-box" class="hidden sm:block absolute bottom-4 left-4 bg-slate-900/85 backdrop-blur border border-slate-700 p-3 rounded-xl text-xs space-y-1.5 shadow-lg pointer-events-none">
+      <div id="legend-title" class="font-bold text-slate-200 mb-1">Anatomical Structures (Schematic Color)</div>
+      <div class="flex items-center gap-2"><span id="leg-glans" class="w-3 h-3 rounded-full inline-block" style="background:#f472b6;"></span><span id="leg-text-glans">Glans (Clitoral ⇄ Penile Glans)</span></div>
+      <div class="flex items-center gap-2"><span id="leg-corpora" class="w-3 h-3 rounded-full inline-block" style="background:#3b82f6;"></span><span id="leg-text-corpora">Corpora Cavernosa (Paired Dorsal Shafts)</span></div>
+      <div class="flex items-center gap-2"><span id="leg-urethra" class="w-3 h-3 rounded-full inline-block" style="background:#eab308;"></span><span id="leg-text-urethra">Tubularized Urethra & Corpus Spongiosum</span></div>
+      <div class="flex items-center gap-2"><span id="leg-plate" class="w-3 h-3 rounded-full inline-block" style="background:#fb7185;"></span><span id="leg-text-plate">Open Urethral Plate (Distal to Meatus)</span></div>
+      <div class="flex items-center gap-2"><span id="leg-scrotum" class="w-3 h-3 rounded-full inline-block" style="background:#d97706;"></span><span id="leg-text-scrotum">Labioscrotal Folds (Labia Majora ⇄ Scrotum)</span></div>
+      <div class="flex items-center gap-2"><span id="leg-gonad" class="w-3 h-3 rounded-full inline-block" style="background:#10b981;"></span><span id="leg-text-gonad">Gonads & Inguinal Descent Path</span></div>
+      <div class="flex items-center gap-2"><span id="leg-vagina" class="w-3 h-3 rounded-full inline-block" style="background:#c084fc;"></span><span id="leg-text-vagina">Vagina / Urogenital Sinus Confluence</span></div>
+    </div>
+  </div>
+
+  <!-- Right Control Panel -->
+  <div class="w-full md:w-[440px] h-[46vh] md:h-full bg-slate-950 border-t md:border-t-0 md:border-l border-slate-800 p-4 md:p-5 overflow-y-auto flex flex-col gap-4">
+    
+    <!-- 1. Prader Stage Presets -->
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <h2 id="ui-sec1-title" class="text-sm font-bold text-sky-400">1. Prader Classification Stage</h2>
+        <span id="current-stage-badge" class="text-xs px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 font-semibold">Stage 0 (Typical Female)</span>
+      </div>
+      <div class="grid grid-cols-6 gap-1.5">
+        <button onclick="applyPraderStage(0)" id="stage-btn-0" class="stage-btn py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-800 hover:bg-slate-700">0</button>
+        <button onclick="applyPraderStage(1)" id="stage-btn-1" class="stage-btn py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-800 hover:bg-slate-700">I</button>
+        <button onclick="applyPraderStage(2)" id="stage-btn-2" class="stage-btn py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-800 hover:bg-slate-700">II</button>
+        <button onclick="applyPraderStage(3)" id="stage-btn-3" class="stage-btn py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-800 hover:bg-slate-700">III</button>
+        <button onclick="applyPraderStage(4)" id="stage-btn-4" class="stage-btn py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-800 hover:bg-slate-700">IV</button>
+        <button onclick="applyPraderStage(5)" id="stage-btn-5" class="stage-btn py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-800 hover:bg-slate-700">V</button>
+      </div>
+      <p id="stage-desc" class="mt-2 text-xs text-slate-300 bg-slate-900 p-2.5 rounded-lg border border-slate-800 leading-relaxed"></p>
+    </div>
+
+    <!-- 2. Anatomical Parameters (5 Continuous Sliders) -->
+    <div class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 id="ui-sec2-title" class="text-sm font-bold text-sky-400">2. Continuous Anatomical Parameters</h2>
+      </div>
+
+      <!-- (1) Glans & Phallic Size -->
+      <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+        <div class="flex justify-between text-xs font-semibold mb-1">
+          <span id="lbl-s1-title">1. Glans & Corpora Size</span>
+          <span id="val-glans" class="text-sky-400">10%</span>
+        </div>
+        <input id="slider-glans" type="range" min="0" max="100" value="10" class="w-full" oninput="onManualSliderChange()" />
+        <div class="flex justify-between text-[10px] text-slate-400">
+          <span id="lbl-s1-min">Min (Stage 0: Clitoral)</span>
+          <span id="lbl-s1-max">Max (Stage V: Penile)</span>
+        </div>
+      </div>
+
+      <!-- (2) Ventral Curvature (Chordee) -->
+      <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+        <div class="flex justify-between text-xs font-semibold mb-1">
+          <span id="lbl-s2-title">2. Ventral Curvature (Chordee)</span>
+          <span id="val-curvature" class="text-sky-400">100%</span>
+        </div>
+        <input id="slider-curvature" type="range" min="0" max="100" value="100" class="w-full" oninput="onManualSliderChange()" />
+        <div class="flex justify-between text-[10px] text-slate-400">
+          <span id="lbl-s2-min">0% (Stage V: Straight)</span>
+          <span id="lbl-s2-max">100% (Stage 0: Max Flexion)</span>
+        </div>
+      </div>
+
+      <!-- (3) Labioscrotal Fusion -->
+      <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+        <div class="flex justify-between text-xs font-semibold mb-1">
+          <span id="lbl-s3-title">3. Labioscrotal Fusion (Labia ⇄ Scrotum)</span>
+          <span id="val-scrotum" class="text-sky-400">0%</span>
+        </div>
+        <input id="slider-scrotum" type="range" min="0" max="100" value="0" class="w-full" oninput="onManualSliderChange()" />
+        <div class="flex justify-between text-[10px] text-slate-400">
+          <span id="lbl-s3-min">0% (Unfused Labia)</span>
+          <span id="lbl-s3-mid">50% (Bifid)</span>
+          <span id="lbl-s3-max">100% (Fused Scrotum)</span>
+        </div>
+      </div>
+
+      <!-- (4) Urethral Meatus Position -->
+      <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+        <div class="flex justify-between text-xs font-semibold mb-1">
+          <span id="lbl-s4-title">4. Urethral Meatus Position (Perineum ⇄ Glans Tip)</span>
+          <span id="val-meatus" class="text-sky-400">0%</span>
+        </div>
+        <input id="slider-meatus" type="range" min="0" max="100" value="0" class="w-full" oninput="onManualSliderChange()" />
+        <div class="flex justify-between text-[10px] text-slate-400">
+          <span id="lbl-s4-min">0% (Perineal)</span>
+          <span id="lbl-s4-mid">50% (Mid-Shaft Ventral)</span>
+          <span id="lbl-s4-max">100% (Glans Apex)</span>
+        </div>
+      </div>
+
+      <!-- (5) Gonadal Descent Position -->
+      <div class="bg-emerald-950/40 p-2.5 rounded-xl border border-emerald-700/60">
+        <div class="flex justify-between text-xs font-semibold mb-1">
+          <span id="lbl-s5-title" class="text-emerald-300">5. Gonadal Descent (Abdominal ⇄ Inguinal ⇄ Scrotal)</span>
+          <span id="val-gonad" class="text-emerald-400">0% (Abdominal)</span>
+        </div>
+        <input id="slider-gonad" type="range" min="0" max="100" value="0" class="w-full" style="accent-color:#10b981;" oninput="onManualSliderChange()" />
+        <div class="flex justify-between text-[10px] text-emerald-300/70">
+          <span id="lbl-s5-min">0% (Intra-abdominal)</span>
+          <span id="lbl-s5-mid">50% (Inguinal Canal)</span>
+          <span id="lbl-s5-max">100% (Scrotal Sac)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Educational Note -->
+    <div id="ui-note-box" class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-[11px] text-slate-400 leading-relaxed">
+      <strong class="text-slate-200">💡 Clinical & Educational Note:</strong><br/>
+      External genitalia develop from shared bipotential embryological structures along a continuous spectrum. Use the 3D view and sliders to explore individual anatomical variations for DSD counseling and medical training.
+    </div>
+  </div>
+
+  <script>
+    // Bilingual Dictionary (EN / JA)
+    const I18N = {
+      en: {
+        subtitle: "DSD Shared Decision-Making & Education",
+        title: "Prader Scale 3D Simulator",
+        langBtn: "🌐 EN / 日本語",
+        modeSchema: "🎨 Schematic Mode",
+        modeReal: "✨ Realistic Mode",
+        viewOblique: "Oblique View",
+        viewLateral: "Lateral (Chordee & Gonads)",
+        viewVentral: "Ventral / Perineal",
+        sagittalOn: "🔍 Sagittal Cut: ON",
+        sagittalOff: "🔍 Sagittal Cut: OFF",
+        legendSchema: "Anatomical Structures (Schematic Color)",
+        legendReal: "Anatomical Structures (Realistic Tissue Mode)",
+        legGlans: "Glans (Clitoral ⇄ Penile Glans)",
+        legCorpora: "Corpora Cavernosa (Paired Dorsal Shafts)",
+        legUrethra: "Tubularized Urethra & Corpus Spongiosum",
+        legPlate: "Open Urethral Plate (Distal to Meatus)",
+        legScrotum: "Labioscrotal Folds (Labia Majora ⇄ Scrotum)",
+        legGonad: "Gonads & Inguinal Descent Path",
+        legVagina: "Vagina / Urogenital Sinus Confluence",
+        sec1Title: "1. Prader Classification Stage",
+        sec2Title: "2. Continuous Anatomical Parameters",
+        customBadge: "Custom Parameter Mode",
+        customDesc: "Adjusting individual anatomical parameters independently. This helps illustrate patient-specific phenotypes where phallic size, chordee, urethral meatus position, and gonadal descent may vary independently.",
+        s1Title: "1. Glans & Corpora Size",
+        s1Min: "Min (Stage 0: Clitoral)",
+        s1Max: "Max (Stage V: Penile)",
+        s2Title: "2. Ventral Curvature (Chordee)",
+        s2Min: "0% (Stage V: Straight)",
+        s2Max: "100% (Stage 0: Max Flexion)",
+        s3Title: "3. Labioscrotal Fusion (Labia ⇄ Scrotum)",
+        s3Min: "0% (Unfused Labia)",
+        s3Mid: "50% (Bifid)",
+        s3Max: "100% (Fused Scrotum)",
+        s4Title: "4. Urethral Meatus Position (Perineum ⇄ Glans Tip)",
+        s4Min: "0% (Perineal)",
+        s4Mid: "50% (Mid-Shaft Ventral)",
+        s4Max: "100% (Glans Apex)",
+        s5Title: "5. Gonadal Descent (Abdominal ⇄ Inguinal ⇄ Scrotal)",
+        s5Min: "0% (Intra-abdominal)",
+        s5Mid: "50% (Inguinal Canal)",
+        s5Max: "100% (Scrotal Sac)",
+        gonadLoc: ["Abdominal", "Internal Ring / Upper Canal", "Inguinal Canal / External Ring", "High Scrotal", "Scrotal Sac"],
+        noteHtml: "<strong class='text-slate-200'>💡 Clinical & Educational Note:</strong><br/>External genitalia develop from shared bipotential embryological structures along a continuous spectrum. Use the 3D view and sliders to explore individual anatomical variations for DSD counseling and medical training.",
+        stages: [
+          {
+            name: "Stage 0 (Typical Female)",
+            desc: "Minimal genital tubercle (clitoris) with maximal ventral flexion. Separate urethral and vaginal openings in the vestibule, unfused labia majora, and intra-abdominal gonads (0%)."
+          },
+          {
+            name: "Stage I",
+            desc: "Mild enlargement of the genital tubercle with slight reduction in ventral flexion. Minimal posterior labial fusion; gonads located near the internal inguinal ring (15%)."
+          },
+          {
+            name: "Stage II",
+            desc: "Moderate phallic enlargement and chordee. Partial posterior labioscrotal fusion forming a funnel-shaped urogenital sinus; gonads entering the upper inguinal canal (35%)."
+          },
+          {
+            name: "Stage III",
+            desc: "Further phallic growth with moderate chordee. Labioscrotal folds fuse into a bifid scrotum; single urogenital orifice at the base/ventral shaft; gonads in the lower inguinal canal (60%)."
+          },
+          {
+            name: "Stage IV",
+            desc: "Well-developed phallus with mild residual chordee. Nearly complete scrotal fusion; urethral meatus on the distal ventral shaft/coronal sulcus; gonads in the high scrotum (85%)."
+          },
+          {
+            name: "Stage V (Typical Male)",
+            desc: "Maximal phallic size with complete straightening (0% curvature). Fully fused scrotum, tubularized urethra reaching the glans apex (100%), and gonads fully descended into the scrotal sac (100%)."
+          }
+        ]
+      },
+      ja: {
+        subtitle: "DSD 意思決定支援・医学教育ツール",
+        title: "Prader分類 3D形態シミュレーター",
+        langBtn: "🌐 日本語 / EN",
+        modeSchema: "🎨 模式図モード",
+        modeReal: "✨ 写実モード",
+        viewOblique: "斜め（全体）",
+        viewLateral: "側面（屈曲・性腺下降）",
+        viewVentral: "腹側・会陰（尿道口）",
+        sagittalOn: "🔍 矢状断・内部透視: ON",
+        sagittalOff: "🔍 矢状断・内部透視: OFF",
+        legendSchema: "解剖学的構造（模式図カラー）",
+        legendReal: "解剖学的構造（写実スキン・粘膜カラー）",
+        legGlans: "亀頭（陰核亀頭 ⇄ 陰茎亀頭）",
+        legCorpora: "陰茎/陰核海綿体（背側左右一対）",
+        legUrethra: "管腔化尿道・尿道海綿体（海綿体腹側）",
+        legPlate: "未閉鎖の尿道板（外尿道口〜亀頭先端）",
+        legScrotum: "陰唇陰嚢隆起（大陰唇 ⇄ 陰嚢）",
+        legGonad: "性腺・精索/導帯（腹腔内 ⇄ 鼠径管 ⇄ 陰嚢内）",
+        legVagina: "膣・尿生殖洞（内部合流）",
+        sec1Title: "1. Prader分類ステージ選択",
+        sec2Title: "2. 解剖学的細項目スライダー（5項目アナログ調整）",
+        customBadge: "カスタム調整モード",
+        customDesc: "5つの解剖学的パラメータを独立して調整中です。同じPrader分類ステージ内でも、患者さんごとに亀頭サイズ・屈曲度・尿道口位置・性腺下降度に個人差があることを視覚的に共有できます。",
+        s1Title: "① 亀頭・海綿体サイズ",
+        s1Min: "最小（Stage 0: 陰核）",
+        s1Max: "最大（Stage V: 陰茎）",
+        s2Title: "② 陰茎海綿体屈曲（陰茎索 / Chordee）",
+        s2Min: "0%（Stage V: ストレート伸展）",
+        s2Max: "100%（Stage 0: 最大屈曲）",
+        s3Title: "③ 陰唇 ⇄ 陰嚢の変化（陰唇陰嚢隆起の癒合）",
+        s3Min: "0%（大陰唇分離）",
+        s3Mid: "50%（二分陰嚢様）",
+        s3Max: "100%（陰嚢完全癒合）",
+        s4Title: "④ 外尿道口の位置（会陰 ⇄ 海綿体腹側 ⇄ 亀頭先端）",
+        s4Min: "0%（会陰・前庭）",
+        s4Mid: "50%（腹側中央）",
+        s4Max: "100%（亀頭先端）",
+        s5Title: "⑤ 性腺の位置（腹腔内 ⇄ 鼠径管 ⇄ 陰嚢内）",
+        s5Min: "0%（腹腔内）",
+        s5Mid: "50%（鼠径管・外鼠径輪）",
+        s5Max: "100%（陰嚢底部）",
+        gonadLoc: ["腹腔内", "内鼠径輪〜鼠径管上部", "鼠径管下部〜外鼠径輪", "陰嚢上部", "陰嚢底部"],
+        noteHtml: "<strong class='text-slate-200'>💡 教育・意思決定支援での活用ポイント：</strong><br/>外性器の形は胎生期の共通原基が連続的に変化するスペクトラムです。尿道は陰茎海綿体の腹側（裏側）に密着して走行し、亀頭先端へと至ります。",
+        stages: [
+          {
+            name: "Stage 0 (標準的女性型)",
+            desc: "生殖結節（陰核）は最小サイズで腹側へ最大に屈曲・密着しています。尿道口と膣口は前庭部に別々に開口し、陰唇は分離、性腺は腹腔内（0%）に位置します。"
+          },
+          {
+            name: "Stage I",
+            desc: "陰核（生殖結節）がやや増大し、屈曲がわずかに緩みます。陰唇の癒合は軽微で、性腺は腹腔内〜内鼠径輪付近（15%）に位置します。"
+          },
+          {
+            name: "Stage II",
+            desc: "海綿体の発達とともに屈曲が中等度に緩和します。後方陰唇が部分癒合し、性腺は内鼠径輪から鼠径管上部（35%）へ移動します。"
+          },
+          {
+            name: "Stage III",
+            desc: "海綿体がさらに成長して伸展が進みます。陰唇陰嚢隆起は半分以上癒合（二分陰嚢様）し、外尿道口は根部〜腹側中央へ、性腺は鼠径管下部〜外鼠径輪（60%）へ下降します。"
+          },
+          {
+            name: "Stage IV",
+            desc: "陰茎はほぼ大きく発達し軽度の屈曲のみ残存します。外尿道口は遠位腹側〜冠状溝付近に達し、性腺は陰嚢上部（85%）まで下降します。"
+          },
+          {
+            name: "Stage V (標準的男性型)",
+            desc: "陰茎は最大サイズとなり、屈曲は完全に解消されてストレート（0%）に伸展します。尿道は腹側を通って亀頭先端（100%）に開口し、性腺は陰嚢底部（100%）へ完全に下降します。"
+          }
+        ]
+      }
+    };
+
+    // Numerical Presets per Stage
+    const STAGE_VALUES = [
+      { glans: 10, curvature: 100, scrotum: 0, meatus: 0, gonad: 0 },
+      { glans: 25, curvature: 80, scrotum: 10, meatus: 12, gonad: 15 },
+      { glans: 45, curvature: 60, scrotum: 30, meatus: 28, gonad: 35 },
+      { glans: 65, curvature: 40, scrotum: 60, meatus: 50, gonad: 60 },
+      { glans: 85, curvature: 20, scrotum: 85, meatus: 78, gonad: 85 },
+      { glans: 100, curvature: 0, scrotum: 100, meatus: 100, gonad: 100 }
+    ];
+
+    let currentLang = 'en'; // 'en' | 'ja'
+    let activeStageIndex = 0; // 0..5 or null if custom
+    const state = { glans: 10, curvature: 100, scrotum: 0, meatus: 0, gonad: 0 };
+    const targetState = { glans: 10, curvature: 100, scrotum: 0, meatus: 0, gonad: 0 };
+    let visualMode = 'schema';
+    let sagittalMode = false;
+
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0f172a);
+
+    const camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 100);
+    camera.position.set(5.4, 2.0, 6.4);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.localClippingEnabled = true;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 0.15, 0.2);
+
+    // Lighting
+    scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+    const mainLight = new THREE.DirectionalLight(0xfff7ed, 0.95);
+    mainLight.position.set(6, 9, 8);
+    scene.add(mainLight);
+    const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.4);
+    fillLight.position.set(-7, 2, 4);
+    scene.add(fillLight);
+    const ventralLight = new THREE.DirectionalLight(0xfde68a, 0.45);
+    ventralLight.position.set(0, -8, 5);
+    scene.add(ventralLight);
+
+    const clipPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0.005);
+
+    function createScrotumBumpTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#808080';
+      ctx.fillRect(0, 0, 256, 256);
+      for (let y = 0; y < 256; y += 4) {
+        const v = Math.floor(128 + 65 * Math.sin(y * 0.35));
+        ctx.strokeStyle = `rgb(${v},${v},${v})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let x = 0; x <= 256; x += 8) {
+          const dy = Math.sin(x * 0.12 + y * 0.05) * 4;
+          if (x === 0) ctx.moveTo(x, y + dy);
+          else ctx.lineTo(x, y + dy);
+        }
+        ctx.stroke();
+      }
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(2, 3);
+      return tex;
+    }
+    const rugaeBumpTex = createScrotumBumpTexture();
+
+    const materials = {
+      pelvis: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, transparent: true, depthWrite: false }),
+      corpora: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide }),
+      skinHood: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, transparent: true, depthWrite: false }),
+      glans: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide }),
+      tubularUrethra: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide }),
+      urethralPlate: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide }),
+      labiaScrotumLeft: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, transparent: true }),
+      labiaScrotumRight: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, transparent: true }),
+      labiaMinora: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide }),
+      raphe: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide }),
+      meatusRing: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide }),
+      vaginaSinus: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, transparent: true }),
+      gonad: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide }),
+      gonadTrack: new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, transparent: true, opacity: 0.45 })
+    };
+
+    function applyMaterialPalette() {
+      const planes = sagittalMode ? [clipPlane] : [];
+      const isReal = visualMode === 'realistic';
+      const dict = I18N[currentLang];
+
+      materials.pelvis.color.setHex(isReal ? 0xe5b899 : 0x334155);
+      materials.pelvis.roughness = isReal ? 0.55 : 0.8;
+      materials.pelvis.opacity = isReal ? 0.25 : 0.22;
+      materials.pelvis.clippingPlanes = planes;
+
+      materials.corpora.color.setHex(isReal ? 0xd98a6c : 0x3b82f6);
+      materials.corpora.roughness = isReal ? 0.42 : 0.35;
+      materials.corpora.clippingPlanes = planes;
+
+      materials.skinHood.color.setHex(isReal ? 0xe2a989 : 0x94a3b8);
+      materials.skinHood.roughness = 0.5;
+      materials.skinHood.opacity = isReal ? (sagittalMode ? 0.25 : 0.65) : 0.12;
+      materials.skinHood.clippingPlanes = planes;
+
+      materials.glans.color.setHex(isReal ? 0xc86d77 : 0xf472b6);
+      materials.glans.roughness = isReal ? 0.28 : 0.35;
+      materials.glans.clearcoat = isReal ? 0.35 : 0.05;
+      materials.glans.clippingPlanes = planes;
+
+      materials.tubularUrethra.color.setHex(isReal ? 0xb95863 : 0xeab308);
+      materials.tubularUrethra.roughness = 0.28;
+
+      materials.urethralPlate.color.setHex(isReal ? 0xd46a7e : 0xfb7185);
+      materials.urethralPlate.roughness = 0.25;
+
+      const scrotumColor = isReal ? 0xc9886b : 0xd97706;
+      [materials.labiaScrotumLeft, materials.labiaScrotumRight].forEach((mat) => {
+        mat.color.setHex(scrotumColor);
+        mat.roughness = isReal ? 0.58 : 0.5;
+        mat.bumpMap = isReal ? rugaeBumpTex : null;
+        mat.bumpScale = isReal ? 0.035 : 0;
+        mat.opacity = isReal ? 0.72 : 0.62;
+        mat.needsUpdate = true;
+      });
+      if (sagittalMode) materials.labiaScrotumRight.opacity = 0.12;
+
+      materials.labiaMinora.color.setHex(isReal ? 0xcf767e : 0xfda4af);
+      materials.raphe.color.setHex(isReal ? 0x8c4f3a : 0x92400e);
+      materials.meatusRing.color.setHex(isReal ? 0x9f1239 : 0xfacc15);
+
+      materials.vaginaSinus.color.setHex(isReal ? 0xbe6a87 : 0xc084fc);
+      materials.vaginaSinus.opacity = 0.85;
+
+      materials.gonad.color.setHex(isReal ? 0xf1f5f9 : 0x10b981);
+      materials.gonad.roughness = 0.25;
+      materials.gonad.clearcoat = 0.3;
+      materials.gonadTrack.color.setHex(isReal ? 0xfda4af : 0x34d399);
+
+      document.getElementById('legend-title').textContent = isReal ? dict.legendReal : dict.legendSchema;
+      document.getElementById('leg-glans').style.background = isReal ? '#c86d77' : '#f472b6';
+      document.getElementById('leg-corpora').style.background = isReal ? '#d98a6c' : '#3b82f6';
+      document.getElementById('leg-urethra').style.background = isReal ? '#b95863' : '#eab308';
+      document.getElementById('leg-plate').style.background = isReal ? '#d46a7e' : '#fb7185';
+      document.getElementById('leg-scrotum').style.background = isReal ? '#c9886b' : '#d97706';
+      document.getElementById('leg-gonad').style.background = isReal ? '#f1f5f9' : '#10b981';
+      document.getElementById('leg-vagina').style.background = isReal ? '#be6a87' : '#c084fc';
+    }
+
+    const rootGroup = new THREE.Group();
+    scene.add(rootGroup);
+
+    const pelvisGeo = new THREE.SphereGeometry(2.2, 32, 24);
+    pelvisGeo.scale(1.18, 1.05, 0.68);
+    const pelvisMesh = new THREE.Mesh(pelvisGeo, materials.pelvis);
+    pelvisMesh.position.set(0, 0.55, -1.25);
+    rootGroup.add(pelvisMesh);
+
+    const foldGeo = new THREE.SphereGeometry(0.76, 36, 28);
+    const leftFold = new THREE.Mesh(foldGeo, materials.labiaScrotumLeft);
+    const rightFold = new THREE.Mesh(foldGeo, materials.labiaScrotumRight);
+    rootGroup.add(leftFold, rightFold);
+
+    const minoraGeo = new THREE.SphereGeometry(0.45, 24, 20);
+    const leftMinora = new THREE.Mesh(minoraGeo, materials.labiaMinora);
+    const rightMinora = new THREE.Mesh(minoraGeo, materials.labiaMinora);
+    rootGroup.add(leftMinora, rightMinora);
+
+    let rapheMesh = new THREE.Mesh(new THREE.BufferGeometry(), materials.raphe);
+    rootGroup.add(rapheMesh);
+
+    const gonadGeo = new THREE.SphereGeometry(0.22, 28, 20);
+    gonadGeo.scale(0.85, 1.25, 0.9);
+    const leftGonadMesh = new THREE.Mesh(gonadGeo, materials.gonad);
+    const rightGonadMesh = new THREE.Mesh(gonadGeo, materials.gonad);
+    let leftCordMesh = new THREE.Mesh(new THREE.BufferGeometry(), materials.gonadTrack);
+    let rightCordMesh = new THREE.Mesh(new THREE.BufferGeometry(), materials.gonadTrack);
+    rootGroup.add(leftGonadMesh, rightGonadMesh, leftCordMesh, rightCordMesh);
+
+    let leftCorpusMesh = new THREE.Mesh(new THREE.BufferGeometry(), materials.corpora);
+    let rightCorpusMesh = new THREE.Mesh(new THREE.BufferGeometry(), materials.corpora);
+    let dorsalHoodMesh = new THREE.Mesh(new THREE.BufferGeometry(), materials.skinHood);
+    let tubularUrethraMesh = new THREE.Mesh(new THREE.BufferGeometry(), materials.tubularUrethra);
+    let urethralPlateMesh = new THREE.Mesh(new THREE.BufferGeometry(), materials.urethralPlate);
+    let vaginaMesh = new THREE.Mesh(new THREE.BufferGeometry(), materials.vaginaSinus);
+    rootGroup.add(leftCorpusMesh, rightCorpusMesh, dorsalHoodMesh, tubularUrethraMesh, urethralPlateMesh, vaginaMesh);
+
+    const glansGroup = new THREE.Group();
+    const glansMainGeo = new THREE.SphereGeometry(0.44, 32, 24);
+    glansMainGeo.scale(1.02, 0.92, 1.3);
+    const glansMesh = new THREE.Mesh(glansMainGeo, materials.glans);
+    const coronaGeo = new THREE.TorusGeometry(0.36, 0.085, 16, 32);
+    coronaGeo.scale(1.05, 0.92, 1.0);
+    const coronaMesh = new THREE.Mesh(coronaGeo, materials.glans);
+    coronaMesh.position.set(0, 0.02, -0.26);
+    glansGroup.add(glansMesh, coronaMesh);
+    rootGroup.add(glansGroup);
+
+    const meatusGroup = new THREE.Group();
+    const meatusRing = new THREE.Mesh(new THREE.TorusGeometry(0.10, 0.032, 16, 24), materials.meatusRing);
+    meatusRing.scale.set(0.75, 1.2, 1.0);
+    const meatusLumen = new THREE.Mesh(
+      new THREE.CircleGeometry(0.09, 20),
+      new THREE.MeshBasicMaterial({ color: 0x1e1b4b, side: THREE.DoubleSide })
+    );
+    meatusLumen.scale.set(0.75, 1.2, 1.0);
+    meatusGroup.add(meatusRing, meatusLumen);
+    rootGroup.add(meatusGroup);
+
+    const vaginalIntroitus = new THREE.Mesh(
+      new THREE.TorusGeometry(0.15, 0.038, 16, 24),
+      materials.vaginaSinus
+    );
+    vaginalIntroitus.rotation.x = Math.PI / 2.2;
+    rootGroup.add(vaginalIntroitus);
+
+    function rebuildMorphology() {
+      const g = state.glans / 100;
+      const c = state.curvature / 100;
+      const s = state.scrotum / 100;
+      const m = state.meatus / 100;
+      const gn = state.gonad / 100;
+
+      // 1. Labioscrotal Folds
+      const xOffset = THREE.MathUtils.lerp(0.66, 0.27, s);
+      const yOffset = THREE.MathUtils.lerp(-0.18, -0.64, s);
+      const zOffset = THREE.MathUtils.lerp(0.02, 0.34, s);
+      const scaleX = THREE.MathUtils.lerp(0.42, 0.78, s);
+      const scaleY = THREE.MathUtils.lerp(1.22, 1.08, s);
+      const scaleZ = THREE.MathUtils.lerp(0.65, 0.92, s);
+      const rotZ = THREE.MathUtils.lerp(0.22, 0.03, s);
+
+      leftFold.position.set(-xOffset, yOffset, zOffset);
+      leftFold.scale.set(scaleX, scaleY, scaleZ);
+      leftFold.rotation.set(0.18 * (1 - s), 0, -rotZ);
+
+      rightFold.position.set(xOffset, yOffset, zOffset);
+      rightFold.scale.set(scaleX, scaleY, scaleZ);
+      rightFold.rotation.set(0.18 * (1 - s), 0, rotZ);
+
+      const minoraVis = Math.max(0, 1 - s * 1.15);
+      leftMinora.visible = minoraVis > 0.05;
+      rightMinora.visible = minoraVis > 0.05 && !sagittalMode;
+      leftMinora.position.set(-0.26 * (1 - s * 0.5), -0.05, 0.12);
+      leftMinora.scale.set(0.18, 0.85 * minoraVis, 0.38);
+      rightMinora.position.set(0.26 * (1 - s * 0.5), -0.05, 0.12);
+      rightMinora.scale.set(0.18, 0.85 * minoraVis, 0.38);
+
+      rapheMesh.geometry.dispose();
+      if (s > 0.2) {
+        const rapheCurve = new THREE.QuadraticBezierCurve3(
+          new THREE.Vector3(0, yOffset - 0.65 * scaleY, zOffset + 0.1),
+          new THREE.Vector3(0, yOffset - 0.15, zOffset + 0.72 * scaleZ),
+          new THREE.Vector3(0, 0.15, zOffset + 0.35)
+        );
+        rapheMesh.geometry = new THREE.TubeGeometry(rapheCurve, 20, 0.022 * s, 8, false);
+        rapheMesh.visible = true;
+      } else {
+        rapheMesh.visible = false;
+      }
+
+      // 2. Gonadal Descent Path
+      const scrotalBottomX = THREE.MathUtils.lerp(0.55, 0.28, s);
+      const scrotalBottomY = THREE.MathUtils.lerp(-0.45, -0.82, s);
+      const scrotalBottomZ = THREE.MathUtils.lerp(0.08, 0.38, s);
+
+      function buildGonadPath(sign) {
+        return new THREE.CatmullRomCurve3([
+          new THREE.Vector3(sign * 0.92, 1.48, -1.15),
+          new THREE.Vector3(sign * 0.82, 1.05, -0.65),
+          new THREE.Vector3(sign * 0.64, 0.55, -0.10),
+          new THREE.Vector3(sign * 0.48, -0.05, 0.22),
+          new THREE.Vector3(sign * scrotalBottomX, scrotalBottomY, scrotalBottomZ)
+        ]);
+      }
+
+      const leftGonadCurve = buildGonadPath(-1);
+      const rightGonadCurve = buildGonadPath(1);
+
+      leftGonadMesh.position.copy(leftGonadCurve.getPointAt(gn));
+      rightGonadMesh.position.copy(rightGonadCurve.getPointAt(gn));
+
+      leftCordMesh.geometry.dispose();
+      rightCordMesh.geometry.dispose();
+      leftCordMesh.geometry = new THREE.TubeGeometry(leftGonadCurve, 28, 0.032, 10, false);
+      rightCordMesh.geometry = new THREE.TubeGeometry(rightGonadCurve, 28, 0.032, 10, false);
+      rightGonadMesh.visible = !sagittalMode;
+      rightCordMesh.visible = !sagittalMode;
+
+      // 3. Corpora Cavernosa & Chordee Curvature
+      const shaftLength = THREE.MathUtils.lerp(0.75, 2.75, g);
+      const singleCorpusRadius = THREE.MathUtils.lerp(0.10, 0.24, g);
+      const glansScale = THREE.MathUtils.lerp(0.38, 1.15, g);
+
+      const straightAngle = 0.18;
+      const maxBendAngle = 1.55;
+      const bendAngle = c * maxBendAngle;
+
+      const p0 = new THREE.Vector3(0, 0.52, -0.18);
+      const p1 = new THREE.Vector3(
+        0,
+        p0.y + Math.sin(straightAngle - bendAngle * 0.35) * (shaftLength * 0.5),
+        p0.z + Math.cos(straightAngle - bendAngle * 0.35) * (shaftLength * 0.5)
+      );
+      const p2 = new THREE.Vector3(
+        0,
+        p1.y + Math.sin(straightAngle - bendAngle * 0.95) * (shaftLength * 0.5),
+        p1.z + Math.cos(straightAngle - bendAngle * 0.95) * (shaftLength * 0.5)
+      );
+
+      const centerShaftCurve = new THREE.QuadraticBezierCurve3(p0, p1, p2);
+
+      const latOffset = singleCorpusRadius * 0.82;
+      const leftPts = [];
+      const rightPts = [];
+      const hoodPts = [];
+      const SAMPLES = 24;
+
+      for (let i = 0; i <= SAMPLES; i++) {
+        const t = i / SAMPLES;
+        const pt = centerShaftCurve.getPointAt(t);
+        const tan = centerShaftCurve.getTangentAt(t).normalize();
+        const dorsalNormal = new THREE.Vector3(0, tan.z, -tan.y).normalize();
+
+        leftPts.push(new THREE.Vector3(-latOffset, pt.y, pt.z));
+        rightPts.push(new THREE.Vector3(latOffset, pt.y, pt.z));
+        hoodPts.push(pt.clone().add(dorsalNormal.multiplyScalar(singleCorpusRadius * 0.35)));
+      }
+
+      leftCorpusMesh.geometry.dispose();
+      rightCorpusMesh.geometry.dispose();
+      leftCorpusMesh.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(leftPts), 24, singleCorpusRadius, 18, false);
+      rightCorpusMesh.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rightPts), 24, singleCorpusRadius, 18, false);
+      rightCorpusMesh.visible = !sagittalMode;
+
+      dorsalHoodMesh.geometry.dispose();
+      dorsalHoodMesh.geometry = new THREE.TubeGeometry(
+        new THREE.CatmullRomCurve3(hoodPts),
+        24,
+        singleCorpusRadius * 1.75,
+        20,
+        false
+      );
+      dorsalHoodMesh.scale.set(1.1, 0.85, 1.0);
+
+      // 4. Glans Placement
+      const shaftEndTan = centerShaftCurve.getTangentAt(1.0).normalize();
+      glansGroup.position.copy(p2);
+      glansGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), shaftEndTan);
+      glansGroup.scale.setScalar(glansScale);
+
+      // 5. Ventral Urethral Course & Urethral Plate
+      const ventralRadiusOffset = singleCorpusRadius * 1.05;
+      const glansTipDist = 0.56 * glansScale;
+      const externalCoursePoints = [];
+
+      const perinealMeatusOrigin = new THREE.Vector3(0, -0.42, -0.08);
+      const rootTangent = centerShaftCurve.getTangentAt(0.0).normalize();
+      const rootVentralNormal = new THREE.Vector3(0, -rootTangent.z, rootTangent.y).normalize();
+      const shaftRootVentralPos = p0.clone().add(rootVentralNormal.clone().multiplyScalar(ventralRadiusOffset));
+
+      externalCoursePoints.push(perinealMeatusOrigin);
+      externalCoursePoints.push(
+        new THREE.Vector3(
+          0,
+          THREE.MathUtils.lerp(perinealMeatusOrigin.y, shaftRootVentralPos.y, 0.55),
+          THREE.MathUtils.lerp(perinealMeatusOrigin.z, shaftRootVentralPos.z, 0.65)
+        )
+      );
+
+      const SHAFT_STEPS = 16;
+      for (let i = 0; i <= SHAFT_STEPS; i++) {
+        const t = i / SHAFT_STEPS;
+        const centerPt = centerShaftCurve.getPointAt(t);
+        const tan = centerShaftCurve.getTangentAt(t).normalize();
+        const ventralNormal = new THREE.Vector3(0, -tan.z, tan.y).normalize();
+        const enterGlansFactor = t > 0.8 ? THREE.MathUtils.lerp(1.0, 0.35, (t - 0.8) / 0.2) : 1.0;
+        const ventralPt = centerPt.clone().add(ventralNormal.multiplyScalar(ventralRadiusOffset * enterGlansFactor));
+        externalCoursePoints.push(ventralPt);
+      }
+
+      const glansMidVentral = p2.clone()
+        .add(shaftEndTan.clone().multiplyScalar(glansTipDist * 0.55))
+        .add(new THREE.Vector3(0, -shaftEndTan.z, shaftEndTan.y).normalize().multiplyScalar(ventralRadiusOffset * 0.15));
+      const glansApexMeatus = p2.clone().add(shaftEndTan.clone().multiplyScalar(glansTipDist));
+
+      externalCoursePoints.push(glansMidVentral);
+      externalCoursePoints.push(glansApexMeatus);
+
+      const fullVentralUrethralCurve = new THREE.CatmullRomCurve3(externalCoursePoints);
+
+      const meatusPos = fullVentralUrethralCurve.getPointAt(m);
+      const meatusTan = fullVentralUrethralCurve.getTangentAt(m).normalize();
+
+      const bladderNeck = new THREE.Vector3(0, 1.32, -1.05);
+      const pelvicMembranousUrethra = new THREE.Vector3(0, 0.15, -0.52);
+      const bulbarUrethraTurn = new THREE.Vector3(0, -0.35, -0.25);
+
+      const tubularPoints = [bladderNeck, pelvicMembranousUrethra, bulbarUrethraTurn];
+      const TUBULAR_SAMPLES = 24;
+      for (let i = 0; i <= TUBULAR_SAMPLES; i++) {
+        const u = (i / TUBULAR_SAMPLES) * m;
+        tubularPoints.push(fullVentralUrethralCurve.getPointAt(u));
+      }
+
+      const tubularUrethraCurve = new THREE.CatmullRomCurve3(tubularPoints);
+      const urethraRadius = THREE.MathUtils.lerp(0.06, 0.105, g);
+      tubularUrethraMesh.geometry.dispose();
+      tubularUrethraMesh.geometry = new THREE.TubeGeometry(tubularUrethraCurve, 36, urethraRadius, 16, false);
+
+      urethralPlateMesh.geometry.dispose();
+      if (m < 0.98) {
+        const platePoints = [];
+        const PLATE_SAMPLES = 20;
+        for (let i = 0; i <= PLATE_SAMPLES; i++) {
+          const u = m + (1.0 - m) * (i / PLATE_SAMPLES);
+          platePoints.push(fullVentralUrethralCurve.getPointAt(u));
+        }
+        const plateCurve = new THREE.CatmullRomCurve3(platePoints);
+        urethralPlateMesh.geometry = new THREE.TubeGeometry(plateCurve, 24, urethraRadius * 0.72, 12, false);
+        urethralPlateMesh.scale.set(1.25, 0.65, 1.0);
+        urethralPlateMesh.visible = true;
+      } else {
+        urethralPlateMesh.visible = false;
+      }
+
+      meatusGroup.position.copy(meatusPos);
+      const ventNormAtMeatus = new THREE.Vector3(0, -meatusTan.z, meatusTan.y).normalize();
+      const blendFactor = THREE.MathUtils.smoothstep(m, 0.78, 0.98);
+      const openingDir = ventNormAtMeatus.lerp(meatusTan, blendFactor).normalize();
+      meatusGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), openingDir);
+
+      // 6. Vagina / Urogenital Sinus
+      const uterusTop = new THREE.Vector3(0, 1.22, -1.55);
+      const vaginaEntry = m < 0.22
+        ? new THREE.Vector3(0, -0.64, -0.22)
+        : pelvicMembranousUrethra.clone().lerp(bulbarUrethraTurn, 0.55);
+
+      const vaginaCurve = new THREE.QuadraticBezierCurve3(
+        uterusTop,
+        new THREE.Vector3(0, 0.25, -1.02),
+        vaginaEntry
+      );
+      vaginaMesh.geometry.dispose();
+      vaginaMesh.geometry = new THREE.TubeGeometry(vaginaCurve, 24, 0.11 * (1 - g * 0.5), 16, false);
+      vaginaMesh.visible = sagittalMode || m < 0.3;
+
+      vaginalIntroitus.visible = m < 0.24;
+      vaginalIntroitus.position.set(0, -0.64, -0.20);
+    }
+
+    function getGonadLocationText(val) {
+      const locs = I18N[currentLang].gonadLoc;
+      if (val < 15) return `${val}% (${locs[0]})`;
+      if (val < 40) return `${val}% (${locs[1]})`;
+      if (val < 75) return `${val}% (${locs[2]})`;
+      if (val < 92) return `${val}% (${locs[3]})`;
+      return `${val}% (${locs[4]})`;
+    }
+
+    // Toggle Language (EN <-> JA)
+    function toggleLanguage() {
+      currentLang = currentLang === 'en' ? 'ja' : 'en';
+      document.documentElement.lang = currentLang;
+      renderLanguageUI();
+    }
+
+    function renderLanguageUI() {
+      const d = I18N[currentLang];
+      document.getElementById('ui-subtitle').textContent = d.subtitle;
+      document.getElementById('ui-title').textContent = d.title;
+      document.getElementById('btn-lang').textContent = d.langBtn;
+      document.getElementById('btn-mode-schema').textContent = d.modeSchema;
+      document.getElementById('btn-mode-realistic').textContent = d.modeReal;
+      document.getElementById('btn-view-oblique').textContent = d.viewOblique;
+      document.getElementById('btn-view-lateral').textContent = d.viewLateral;
+      document.getElementById('btn-view-ventral').textContent = d.viewVentral;
+      document.getElementById('btn-sagittal').textContent = sagittalMode ? d.sagittalOn : d.sagittalOff;
+
+      document.getElementById('legend-title').textContent = visualMode === 'realistic' ? d.legendReal : d.legendSchema;
+      document.getElementById('leg-text-glans').textContent = d.legGlans;
+      document.getElementById('leg-text-corpora').textContent = d.legCorpora;
+      document.getElementById('leg-text-urethra').textContent = d.legUrethra;
+      document.getElementById('leg-text-plate').textContent = d.legPlate;
+      document.getElementById('leg-text-scrotum').textContent = d.legScrotum;
+      document.getElementById('leg-text-gonad').textContent = d.legGonad;
+      document.getElementById('leg-text-vagina').textContent = d.legVagina;
+
+      document.getElementById('ui-sec1-title').textContent = d.sec1Title;
+      document.getElementById('ui-sec2-title').textContent = d.sec2Title;
+
+      document.getElementById('lbl-s1-title').textContent = d.s1Title;
+      document.getElementById('lbl-s1-min').textContent = d.s1Min;
+      document.getElementById('lbl-s1-max').textContent = d.s1Max;
+
+      document.getElementById('lbl-s2-title').textContent = d.s2Title;
+      document.getElementById('lbl-s2-min').textContent = d.s2Min;
+      document.getElementById('lbl-s2-max').textContent = d.s2Max;
+
+      document.getElementById('lbl-s3-title').textContent = d.s3Title;
+      document.getElementById('lbl-s3-min').textContent = d.s3Min;
+      document.getElementById('lbl-s3-mid').textContent = d.s3Mid;
+      document.getElementById('lbl-s3-max').textContent = d.s3Max;
+
+      document.getElementById('lbl-s4-title').textContent = d.s4Title;
+      document.getElementById('lbl-s4-min').textContent = d.s4Min;
+      document.getElementById('lbl-s4-mid').textContent = d.s4Mid;
+      document.getElementById('lbl-s4-max').textContent = d.s4Max;
+
+      document.getElementById('lbl-s5-title').textContent = d.s5Title;
+      document.getElementById('lbl-s5-min').textContent = d.s5Min;
+      document.getElementById('lbl-s5-mid').textContent = d.s5Mid;
+      document.getElementById('lbl-s5-max').textContent = d.s5Max;
+
+      document.getElementById('ui-note-box').innerHTML = d.noteHtml;
+
+      if (activeStageIndex !== null) {
+        document.getElementById('current-stage-badge').textContent = d.stages[activeStageIndex].name;
+        document.getElementById('stage-desc').textContent = d.stages[activeStageIndex].desc;
+      } else {
+        document.getElementById('current-stage-badge').textContent = d.customBadge;
+        document.getElementById('stage-desc').textContent = d.customDesc;
+      }
+
+      updateSliderLabels(targetState.glans, targetState.curvature, targetState.scrotum, targetState.meatus, targetState.gonad);
+    }
+
+    function setVisualMode(mode) {
+      visualMode = mode;
+      const btnSchema = document.getElementById('btn-mode-schema');
+      const btnReal = document.getElementById('btn-mode-realistic');
+
+      if (mode === 'schema') {
+        btnSchema.className = "flex-1 py-1.5 px-2.5 text-xs rounded-lg font-bold bg-sky-600 text-white border border-sky-400 transition";
+        btnReal.className = "flex-1 py-1.5 px-2.5 text-xs rounded-lg font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition";
+      } else {
+        btnReal.className = "flex-1 py-1.5 px-2.5 text-xs rounded-lg font-bold bg-amber-600 text-white border border-amber-300 transition";
+        btnSchema.className = "flex-1 py-1.5 px-2.5 text-xs rounded-lg font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition";
+      }
+
+      applyMaterialPalette();
+      rebuildMorphology();
+    }
+
+    function applyPraderStage(index) {
+      activeStageIndex = index;
+      const st = STAGE_VALUES[index];
+      const dict = I18N[currentLang];
+
+      targetState.glans = st.glans;
+      targetState.curvature = st.curvature;
+      targetState.scrotum = st.scrotum;
+      targetState.meatus = st.meatus;
+      targetState.gonad = st.gonad;
+
+      document.getElementById('slider-glans').value = st.glans;
+      document.getElementById('slider-curvature').value = st.curvature;
+      document.getElementById('slider-scrotum').value = st.scrotum;
+      document.getElementById('slider-meatus').value = st.meatus;
+      document.getElementById('slider-gonad').value = st.gonad;
+
+      updateSliderLabels(st.glans, st.curvature, st.scrotum, st.meatus, st.gonad);
+      document.getElementById('current-stage-badge').textContent = dict.stages[index].name;
+      document.getElementById('stage-desc').textContent = dict.stages[index].desc;
+
+      document.querySelectorAll('.stage-btn').forEach((btn, i) => {
+        if (i === index) {
+          btn.className = "stage-btn py-2 rounded-lg text-xs font-bold border border-sky-400 bg-sky-600 text-white shadow";
+        } else {
+          btn.className = "stage-btn py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700";
+        }
+      });
+    }
+
+    function onManualSliderChange() {
+      activeStageIndex = null;
+      const dict = I18N[currentLang];
+      const g = Number(document.getElementById('slider-glans').value);
+      const c = Number(document.getElementById('slider-curvature').value);
+      const s = Number(document.getElementById('slider-scrotum').value);
+      const m = Number(document.getElementById('slider-meatus').value);
+      const gn = Number(document.getElementById('slider-gonad').value);
+
+      targetState.glans = g;
+      targetState.curvature = c;
+      targetState.scrotum = s;
+      targetState.meatus = m;
+      targetState.gonad = gn;
+
+      updateSliderLabels(g, c, s, m, gn);
+      document.getElementById('current-stage-badge').textContent = dict.customBadge;
+      document.getElementById('stage-desc').textContent = dict.customDesc;
+
+      document.querySelectorAll('.stage-btn').forEach((btn) => {
+        btn.className = "stage-btn py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700";
+      });
+    }
+
+    function updateSliderLabels(g, c, s, m, gn) {
+      document.getElementById('val-glans').textContent = `${g}%`;
+      document.getElementById('val-curvature').textContent = `${c}%`;
+      document.getElementById('val-scrotum').textContent = `${s}%`;
+      document.getElementById('val-meatus').textContent = `${m}%`;
+      document.getElementById('val-gonad').textContent = getGonadLocationText(gn);
+    }
+
+    function setCameraView(view) {
+      if (view === 'oblique') {
+        camera.position.set(5.4, 2.0, 6.4);
+        controls.target.set(0, 0.15, 0.2);
+      } else if (view === 'lateral') {
+        camera.position.set(7.4, 0.35, 0.1);
+        controls.target.set(0, 0.15, 0.1);
+      } else if (view === 'ventral') {
+        camera.position.set(0, -4.8, 4.4);
+        controls.target.set(0, 0.0, 0.25);
+      }
+      controls.update();
+    }
+
+    function toggleSagittal() {
+      sagittalMode = !sagittalMode;
+      const dict = I18N[currentLang];
+      const btn = document.getElementById('btn-sagittal');
+      btn.textContent = sagittalMode ? dict.sagittalOn : dict.sagittalOff;
+      btn.className = sagittalMode
+        ? "px-2.5 py-1 text-xs rounded-lg bg-sky-600 border border-sky-300 text-white transition font-semibold"
+        : "px-2.5 py-1 text-xs rounded-lg bg-indigo-900/80 border border-indigo-500 text-indigo-200 hover:bg-indigo-700 transition font-semibold";
+
+      applyMaterialPalette();
+      if (sagittalMode) setCameraView('lateral');
+      rebuildMorphology();
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+
+    applyMaterialPalette();
+    renderLanguageUI();
+    applyPraderStage(0);
+    rebuildMorphology();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      let needsUpdate = false;
+      ['glans', 'curvature', 'scrotum', 'meatus', 'gonad'].forEach((key) => {
+        const diff = targetState[key] - state[key];
+        if (Math.abs(diff) > 0.05) {
+          state[key] += diff * 0.15;
+          needsUpdate = true;
+        } else if (state[key] !== targetState[key]) {
+          state[key] = targetState[key];
+          needsUpdate = true;
+        }
+      });
+
+      if (needsUpdate) rebuildMorphology();
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
